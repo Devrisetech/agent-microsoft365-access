@@ -44,7 +44,7 @@ interactive agents (local, remote, or cloud).
 
 Do not call Graph from memory. This repo vendors the official Microsoft Graph documentation as a git
 submodule at `vendors/microsoft-graph-docs/` (upstream
-`git@github.com:microsoftgraph/microsoft-graph-docs-contrib.git`).
+`https://github.com/microsoftgraph/microsoft-graph-docs-contrib.git`).
 
 Workflow (paths relative to the submodule root):
 
