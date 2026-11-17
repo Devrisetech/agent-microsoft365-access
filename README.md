@@ -4,9 +4,9 @@
 
 A **setup package** that enables Microsoft Office 365 access for AI coding agents — Claude Code,
 Codex, Gemini, and others. It gives you the human administrator runbook, a grounded explanation of
-*why* this approach, and a copy-paste prompt that makes an AI agent wire the integration into any
-target git repository. It documents the integration **flow**; it ships no runnable code and no MCP
-server.
+*why* this approach, and copy-paste prompts that make an AI agent wire the integration into any
+target git repository and verify it. It documents the integration **flow**; it ships no runnable code
+and no MCP server.
 
 ## Table of contents
 
@@ -16,8 +16,7 @@ server.
 - [Installation](#installation)
   - [Part 1 — Administrator setup (human)](#part-1--administrator-setup-human)
   - [Part 2 — AI-powered installation](#part-2--ai-powered-installation)
-- [How it works](#how-it-works)
-- [Repository structure](#repository-structure)
+  - [Part 3 — Verify (read-only)](#part-3--verify-read-only)
 - [Security](#security)
 - [Maintainers](#maintainers)
 - [License](#license)
@@ -25,26 +24,28 @@ server.
 ## About
 
 AI coding agents increasingly need to read and act on Office 365 data — mail, calendar, files in
-SharePoint/OneDrive, Teams messages. An agent runs **headless**: there is no human at a browser to
-sign in, approve MFA, or click consent. This package standardizes a single, auditable way for an agent
-to reach Office 365 through the **Microsoft Graph API** using an application identity, and automates
-wiring that contract into a repository your agent works in.
+SharePoint/OneDrive, Teams messages. An agent often runs **headless** (CI, a scheduled job, an
+operator server) and may also run interactively, across local, remote, and cloud deployments — in
+none of these is there a reliable human at a browser to sign in, approve MFA, or click consent. This
+package standardizes a single, auditable way for an agent to reach Office 365 through the **Microsoft
+Graph API** using an application identity, and automates wiring that contract into a repository your
+agent works in.
 
-The package is **org-neutral**: it uses placeholders (`<TENANT_ID>`, `<CLIENT_ID>`, `<BOT_UPN>`, and
-the env var `MCP_MS_OFFICE365_CLIENT_SECRET`) so any organization can adopt it. Your tenant-specific
-values stay in your own private configuration — never in this repository.
+The package is **org-neutral**: it uses the placeholder `<BOT_UPN>` and the credential env vars
+`GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET`, so any organization can adopt it.
+Your tenant-specific values stay in your own private configuration — never in this repository.
 
 ## Why Microsoft Graph (client credentials)
 
 Three approaches were considered; Microsoft Graph with the client-credentials grant was chosen because
-it is the only one that is genuinely headless, needs no extra licensing, is generally available, and
-is centrally governed in Microsoft Entra.
+it is the only one that is genuinely non-interactive, needs no extra licensing, is generally
+available, and is centrally governed in Microsoft Entra.
 
-| Option | What it is | Verdict |
+| Option | What it is | Assessment |
 | --- | --- | --- |
-| A — Agent 365 / per-app MCP servers | Microsoft-hosted per-app MCP servers | Rejected — positioned as legacy/back-compat |
-| B — Work IQ MCP | Microsoft's newer agent MCP surface | Rejected — consumption-billed and partly in preview |
-| **C — Microsoft Graph REST API v1.0 (client credentials)** | GA REST surface over O365, app-only OAuth2 | **Chosen** |
+| A — Agent 365 / per-app MCP servers | Microsoft-hosted per-app MCP servers | Not chosen — positioned as legacy/back-compat |
+| B — Work IQ MCP | Microsoft's newer agent MCP surface | Not chosen — consumption-billed and partly in preview |
+| **C — Microsoft Graph REST API v1.0 (client credentials)** | GA REST surface over Office 365, app-only OAuth2 | **Chosen** |
 
 Read the grounded, fully-cited rationale — including the honest app-only limitations — in
 [`docs/solution-rationale.md`](docs/solution-rationale.md).
@@ -54,73 +55,48 @@ Read the grounded, fully-cited rationale — including the honest app-only limit
 - A **Microsoft 365 / Entra tenant** and an administrator who can register apps and grant admin
   consent (**Global Administrator** or **Privileged Role Administrator**).
 - A **licensed service account** (bot mailbox/OneDrive) for the agent to act as.
-- An AI coding agent whose host can hold the env var `MCP_MS_OFFICE365_CLIENT_SECRET` and reach
-  `login.microsoftonline.com` and `graph.microsoft.com` over HTTPS.
+- An AI coding agent whose host can hold the `GRAPH_TENANT_ID` / `GRAPH_CLIENT_ID` /
+  `GRAPH_CLIENT_SECRET` env vars and reach `login.microsoftonline.com` and `graph.microsoft.com` over
+  HTTPS.
 
 ## Installation
 
-Installation has two parts: a one-time human setup in Microsoft Entra, then an AI-powered step that
-wires a specific repository.
+Installation has three parts: a one-time human setup in Microsoft Entra, an AI-powered step that wires
+a specific repository, and a read-only check that it works.
 
 ### Part 1 — Administrator setup (human)
 
 A Microsoft Entra administrator registers the application, creates a client secret, grants
 least-privilege Microsoft Graph **application** permissions (with admin consent), and provisions the
-service account. This produces four values — tenant ID, client ID, client secret, and service user
-UPN.
+service account. This produces the credentials delivered as `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and
+`GRAPH_CLIENT_SECRET`, plus the service user UPN.
 
-➡️ Follow the full runbook: [`docs/entra-admin-setup.md`](docs/entra-admin-setup.md).
+➡️ Follow the full runbook: [`docs/entra-admin-setup.md`](docs/entra-admin-setup.md). Grant scopes per
+the matrix in [`docs/permissions-reference.md`](docs/permissions-reference.md).
 
 > [!IMPORTANT]
 > Deliver the client secret only through a secret manager / host secret store as
-> `MCP_MS_OFFICE365_CLIENT_SECRET`. Never put it in a repository, chat, or ticket.
+> `GRAPH_CLIENT_SECRET`. Never put it in a repository, chat, or ticket.
 
 ### Part 2 — AI-powered installation
 
 Hand the prompt in [`prompts/enable-office365.md`](prompts/enable-office365.md) to your AI agent,
-along with the **target repository path** and the three non-secret values. The agent detects the
-repo's agent memory file (`CLAUDE.md`, `AGENTS.md`, or `GEMINI.md`), injects the Office 365 access
-block from [`templates/office365-access.snippet.md`](templates/office365-access.snippet.md), and
-verifies the secret env var is present — without ever writing the secret.
+along with the **target repository path** and the service user UPN. The agent detects the repo's agent
+memory file (`CLAUDE.md`, `AGENTS.md`, or `GEMINI.md`), injects the Office 365 access block from
+[`templates/office365-access.snippet.md`](templates/office365-access.snippet.md), makes the official
+Graph docs available as a submodule, and verifies the credential env vars are present — without ever
+writing the secret.
 
-## How it works
+### Part 3 — Verify (read-only)
 
-An agent authenticates with the OAuth 2.0 client-credentials (app-only) grant — no signed-in user —
-and calls Microsoft Graph `v1.0`:
-
-1. **Token** — `POST https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/token` with
-   `grant_type=client_credentials` and `scope=https://graph.microsoft.com/.default`.
-2. **Call** — present `Authorization: Bearer <token>` against `https://graph.microsoft.com/v1.0`,
-   naming a user explicitly (there is no `/me` in app-only), e.g. `/users/<BOT_UPN>/messages`.
-
-The exact REST contract is in [`docs/authentication.md`](docs/authentication.md); the per-workload
-permission matrix and app-only gotchas are in
-[`docs/permissions-reference.md`](docs/permissions-reference.md).
-
-## Repository structure
-
-```
-.
-├── README.md                          # this file
-├── CLAUDE.md                          # guidance for AI agents working ON this package
-├── LICENSE                            # MIT (Devrise Technology)
-├── docs/
-│   ├── solution-rationale.md          # why Microsoft Graph client-credentials (options A/B/C)
-│   ├── entra-admin-setup.md           # Part 1: human Entra administrator runbook
-│   ├── authentication.md              # REST API contract (token + call + throttling)
-│   └── permissions-reference.md       # application-permission matrix + app-only gotchas
-├── prompts/
-│   └── enable-office365.md            # Part 2: the AI install prompt (takes a target repo path)
-└── templates/
-    └── office365-access.snippet.md    # the block the install prompt injects into the target repo
-```
+Hand the prompt in [`prompts/verify-office365.md`](prompts/verify-office365.md) to the agent. It mints
+a token and makes `GET`-only calls to confirm the credentials, consented permissions, and network
+path work. It writes nothing and never reveals the secret.
 
 ## Security
 
-- This is a **public repository** — treat everything in it as world-readable. It contains only
-  placeholders, never real tenant/client IDs, service emails, internal URLs, or secrets.
-- The client secret is delivered to agents **only** via `MCP_MS_OFFICE365_CLIENT_SECRET` and must
-  never be printed, logged, or committed.
+- The client secret is delivered to agents **only** via `GRAPH_CLIENT_SECRET` and must never be
+  printed, logged, or committed.
 - Grant the **least privilege** the agent needs (prefer `Sites.Selected` over tenant-wide scopes),
   and review OneDrive/Teams scopes for blast radius — see
   [`docs/permissions-reference.md`](docs/permissions-reference.md).

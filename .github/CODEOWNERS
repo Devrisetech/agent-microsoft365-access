@@ -1,0 +1,20 @@
+# CODEOWNERS — protect sensitive paths.
+#
+# Changes to the paths below require review from the @Devrisetech/community-maintainor team.
+# The team must be visible and have *write* access to this repository.
+#
+# Enforcement note: code-owner review is only *required* when a branch protection rule
+# (or ruleset) with "Require review from Code Owners" is enabled on the default branch.
+# The CODEOWNERS file alone requests reviews; branch protection makes them mandatory.
+
+# Agent operating rules and project config
+/CLAUDE.md                 @Devrisetech/community-maintainor
+/.claude/settings.json     @Devrisetech/community-maintainor
+
+# Legal
+/LICENSE                   @Devrisetech/community-maintainor
+
+# Protect the CODEOWNERS file itself. Per GitHub docs, to protect a repository fully
+# against unauthorized changes you must define an owner for CODEOWNERS; otherwise anyone
+# with write access could edit the ownership rules.
+/.github/CODEOWNERS        @Devrisetech/community-maintainor

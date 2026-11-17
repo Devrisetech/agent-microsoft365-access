@@ -6,16 +6,16 @@ and **what** comes back. It deliberately does **not** prescribe *how* to connect
 client, SDK, or token cache is left to the agent and its host.
 
 > [!IMPORTANT]
-> The client secret is sensitive. Read it only from the environment variable
-> `MCP_MS_OFFICE365_CLIENT_SECRET`. Never print, log, echo, hard-code, or commit it.
+> The client secret is sensitive. Read it only from the environment variable `GRAPH_CLIENT_SECRET`.
+> Never print, log, echo, hard-code, or commit it.
 
-## Identifiers the caller needs
+## Credentials (from the environment)
 
-| Value | Placeholder | Secret? | Source |
+| Value | Env var | Secret? | Source |
 | --- | --- | --- | --- |
-| Directory (tenant) ID | `<TENANT_ID>` | No | App registration — Overview page |
-| Application (client) ID | `<CLIENT_ID>` | No | App registration — Overview page |
-| Client secret | `MCP_MS_OFFICE365_CLIENT_SECRET` (env var) | **Yes** | App registration — Certificates & secrets |
+| Directory (tenant) ID | `GRAPH_TENANT_ID` | No | App registration — Overview page |
+| Application (client) ID | `GRAPH_CLIENT_ID` | No | App registration — Overview page |
+| Client secret | `GRAPH_CLIENT_SECRET` | **Yes** | App registration — Certificates & secrets |
 | Service user (UPN) | `<BOT_UPN>` | No | The provisioned bot/service mailbox |
 
 See [`entra-admin-setup.md`](entra-admin-setup.md) for how an administrator produces these.
@@ -23,20 +23,20 @@ See [`entra-admin-setup.md`](entra-admin-setup.md) for how an administrator prod
 ## Step 1 — Request an access token
 
 ```http
-POST https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/token
+POST https://login.microsoftonline.com/${GRAPH_TENANT_ID}/oauth2/v2.0/token
 Content-Type: application/x-www-form-urlencoded
 
-client_id=<CLIENT_ID>
+client_id=${GRAPH_CLIENT_ID}
 &scope=https://graph.microsoft.com/.default
-&client_secret=<value of MCP_MS_OFFICE365_CLIENT_SECRET>
+&client_secret=${GRAPH_CLIENT_SECRET}
 &grant_type=client_credentials
 ```
 
 | Body parameter | Required | Value |
 | --- | --- | --- |
-| `client_id` | Yes | `<CLIENT_ID>` |
+| `client_id` | Yes | `GRAPH_CLIENT_ID` |
 | `scope` | Yes | `https://graph.microsoft.com/.default` — requests every application permission the tenant admin has consented to for this app |
-| `client_secret` | Yes | The secret value, from `MCP_MS_OFFICE365_CLIENT_SECRET` |
+| `client_secret` | Yes | The secret value, from `GRAPH_CLIENT_SECRET` |
 | `grant_type` | Yes | `client_credentials` |
 
 There is no user, browser, or MFA prompt in this flow.
@@ -82,6 +82,10 @@ Authorization: Bearer <access_token>
 > explicitly, e.g. `/users/<BOT_UPN>/...` for that user's mail, calendar, or drive. Use the service
 > account's UPN (`<BOT_UPN>`) as the `user-id`.
 
+Ground the exact endpoint, permissions, and response shape in the official Graph docs — see
+[`../templates/office365-access.snippet.md`](../templates/office365-access.snippet.md) for the
+vendored-submodule workflow, or <https://learn.microsoft.com/en-us/graph/>.
+
 ## Throttling contract
 
 Microsoft Graph throttles per several overlapping limits (per app across all tenants, per tenant, per
@@ -113,7 +117,8 @@ An agent host with an outbound network policy must allow HTTPS to exactly these 
 
 - **Do not** use the ROPC / password grant (`grant_type=password`). It is deprecated and breaks under
   MFA and Conditional Access.
-- **Do not** embed the client secret in source, config, `.mcp.json`, or a committed `.env`.
+- **Do not** embed the client secret in source, config, `.mcp.json`, or a committed `.env`. It comes
+  from `GRAPH_CLIENT_SECRET` at runtime only.
 
 ## References
 

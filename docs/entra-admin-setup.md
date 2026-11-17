@@ -6,12 +6,13 @@ service account that an AI coding agent will use for headless (app-only) access 
 
 You perform this **once per tenant**. The output is four values you hand to the operator who runs the
 [AI-powered installation](../prompts/enable-office365.md): the **tenant ID**, the **client ID**, the
-**client secret**, and the **service user UPN**.
+**client secret**, and the **service user UPN**. The three credentials are delivered as the
+environment variables `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET`.
 
 > [!WARNING]
 > The client secret is the one sensitive value here. Deliver it only through a secret manager or a
-> host/CI secret store as the environment variable `MCP_MS_OFFICE365_CLIENT_SECRET`. Never paste it
-> into a repository, a chat, a ticket, or a file under version control.
+> host/CI secret store as the environment variable `GRAPH_CLIENT_SECRET`. Never paste it into a
+> repository, a chat, a ticket, or a file under version control.
 
 ## Prerequisites
 
@@ -42,7 +43,7 @@ These are not secret.
 > [!NOTE]
 > For long-lived setups, prefer a **certificate** credential over a client secret.
 
-Hand the secret to the operator through your secret store as `MCP_MS_OFFICE365_CLIENT_SECRET`.
+Hand the secret to the operator through your secret store as `GRAPH_CLIENT_SECRET`.
 
 ## Step 3 — Add Microsoft Graph application permissions and grant consent
 
@@ -72,11 +73,11 @@ name a user. Use a dedicated, non-human account so agent activity stays scoped t
 
 Give the operator these four values for the [installation prompt](../prompts/enable-office365.md):
 
-| Value | Placeholder | Delivery |
+| Value | Delivered as | Delivery |
 | --- | --- | --- |
-| Directory (tenant) ID | `<TENANT_ID>` | Plain (not secret) |
-| Application (client) ID | `<CLIENT_ID>` | Plain (not secret) |
-| Client secret | `MCP_MS_OFFICE365_CLIENT_SECRET` | Secret store / env var **only** |
+| Directory (tenant) ID | `GRAPH_TENANT_ID` | Env var (not secret) |
+| Application (client) ID | `GRAPH_CLIENT_ID` | Env var (not secret) |
+| Client secret | `GRAPH_CLIENT_SECRET` | Secret store / env var **only** |
 | Service user UPN | `<BOT_UPN>` | Plain (not secret) |
 
 ## Verification
@@ -85,12 +86,13 @@ Confirm the token and a call succeed before handing off (replace placeholders; s
 your env, never inline in a saved file):
 
 ```bash
+# Export GRAPH_TENANT_ID, GRAPH_CLIENT_ID, GRAPH_CLIENT_SECRET from your secret store first.
 # 1) Get a token
-curl -s -X POST "https://login.microsoftonline.com/<TENANT_ID>/oauth2/v2.0/token" \
-  -d "client_id=<CLIENT_ID>" \
+curl -s -X POST "https://login.microsoftonline.com/${GRAPH_TENANT_ID}/oauth2/v2.0/token" \
+  -d "client_id=${GRAPH_CLIENT_ID}" \
   -d "scope=https://graph.microsoft.com/.default" \
   -d "grant_type=client_credentials" \
-  --data-urlencode "client_secret=${MCP_MS_OFFICE365_CLIENT_SECRET}"
+  --data-urlencode "client_secret=${GRAPH_CLIENT_SECRET}"
 
 # 2) Use the returned access_token to read the service mailbox
 curl -s "https://graph.microsoft.com/v1.0/users/<BOT_UPN>/messages?\$top=1" \
@@ -103,7 +105,7 @@ means missing consent or permissions; a `404` usually means the mailbox/drive is
 ## Rotation
 
 Rotate before expiry: create a second client secret, switch consumers to the new
-`MCP_MS_OFFICE365_CLIENT_SECRET` value, then delete the old secret.
+`GRAPH_CLIENT_SECRET` value, then delete the old secret.
 
 ## References
 

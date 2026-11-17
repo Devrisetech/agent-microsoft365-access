@@ -3,25 +3,25 @@
 This document records *why* this package gives a headless AI coding agent (Claude Code, Codex, Gemini, and similar) access to Microsoft Office 365 data through the **Microsoft Graph REST API v1.0** with an **OAuth 2.0 client-credentials (app-only) grant**, rather than through Microsoft's agent-oriented MCP surfaces. It states the options considered, the decision drivers, and the honest limitations of the chosen approach.
 
 > [!NOTE]
-> Audience: an engineer or architect evaluating this package. Configuration values appear only as placeholders — `<TENANT_ID>`, `<CLIENT_ID>`, `<BOT_UPN>`, and the client secret read from the environment variable `MCP_MS_OFFICE365_CLIENT_SECRET`. Substitute your own tenant's values.
+> Audience: an engineer or architect evaluating this package. Configuration values appear only as placeholders — `<BOT_UPN>` and the credentials read from the environment variables `GRAPH_TENANT_ID`, `GRAPH_CLIENT_ID`, and `GRAPH_CLIENT_SECRET`. Substitute your own tenant's values.
 
 ## The problem
 
-A headless agent runs in CI, a scheduled job, or an operator server. It has:
+An AI coding agent needs Office 365 access across a range of deployment shapes — local, remote, and cloud — and in both **interactive** and **headless** modes (an operator-driven session, CI, or a scheduled job). The access mechanism must work the same in all of them, which means it cannot depend on a person being present. In its hardest case it has:
 
 - **no interactive user** at the keyboard to complete a sign-in prompt,
 - **no browser** to render a consent or login page,
 - **no second factor** (MFA) device in the loop, and
 - a need for a **stable, documented, auditable** contract that will not shift under it.
 
-The question is which Microsoft access mechanism satisfies all of these at once.
+The question is which Microsoft access mechanism satisfies all of these at once, so that the same wiring serves every variant.
 
 ## Options considered
 
-| Option | What it is | Verdict & why |
+| Option | What it is | Assessment |
 | --- | --- | --- |
-| **A — Microsoft-hosted per-app MCP servers** (Copilot, Calendar, Mail, SharePoint, OneDrive, Teams, User, Word) | Workload-specific Microsoft-hosted MCP servers exposed through the Agent 365 tooling surface. | **Rejected.** Microsoft states these application-specific MCP tools "are only intended for backward compatibility purposes and shouldn't be used in production environments or new projects" ([Agent 365 — MCP server options](https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview)). A legacy/back-compat surface is the wrong foundation for a reusable package. |
-| **B — Work IQ MCP** (Microsoft's forward path for agent MCP access) | A single MCP endpoint collapsing Microsoft 365 operations into ~10 generic verbs (`fetch`, `create_entity`, `update_entity`, `ask`, `retrieve`, …) over mail, calendar, files, people, chat, and sites ([Work IQ MCP overview](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/overview)). | **Rejected for this package — see nuance below.** It is Microsoft's recommended path "for new projects that require access to Microsoft 365 resources" ([MCP server options](https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview)), but it is tied to Work IQ **usage-based billing** (Copilot Credits / pay-as-you-go), parts of the surface are **in preview**, and the practical licensing picture for non-Copilot identities is unsettled. |
+| **A — Microsoft-hosted per-app MCP servers** (Copilot, Calendar, Mail, SharePoint, OneDrive, Teams, User, Word) | Workload-specific Microsoft-hosted MCP servers exposed through the Agent 365 tooling surface. | **Not chosen.** Microsoft states these application-specific MCP tools "are only intended for backward compatibility purposes and shouldn't be used in production environments or new projects" ([Agent 365 — MCP server options](https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview)). The main disadvantage: a legacy/back-compat surface is a weak foundation for a reusable package. |
+| **B — Work IQ MCP** (Microsoft's forward path for agent MCP access) | A single MCP endpoint collapsing Microsoft 365 operations into ~10 generic verbs (`fetch`, `create_entity`, `update_entity`, `ask`, `retrieve`, …) over mail, calendar, files, people, chat, and sites ([Work IQ MCP overview](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq/mcp/overview)). | **Not chosen.** It is Microsoft's recommended path "for new projects that require access to Microsoft 365 resources" ([MCP server options](https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview)). Its disadvantages for a zero-extra-cost, reusable package: it is tied to Work IQ **usage-based billing** (Copilot Credits / pay-as-you-go) and parts of the surface are **in preview**. |
 | **C — Microsoft Graph REST API v1.0 + OAuth 2.0 client-credentials (app-only)** | Direct HTTPS calls to `https://graph.microsoft.com/v1.0/...` with an app-only bearer token minted from the tenant's token endpoint. | **Chosen.** Satisfies all four decision drivers simultaneously (below): non-interactive auth, zero extra licensing, GA maturity, and central Entra governance. |
 
 ### Decision drivers (why C)
@@ -55,14 +55,6 @@ App-only access is not a superset of what a signed-in user can do. These constra
 ## Operational constraint: throttling
 
 Graph enforces service limits. On a `429 Too Many Requests` the client **must** honor the `Retry-After` header and back off ([Throttling guidance](https://learn.microsoft.com/en-us/graph/throttling)). There is also a global ceiling of **130,000 requests per 10 seconds per app across all tenants** ([Throttling limits](https://learn.microsoft.com/en-us/graph/throttling-limits)). Any agent built on this package should implement `Retry-After`-aware retry rather than tight-loop retrying.
-
-## Status of the rejected agent surfaces (verified 2026-11-17)
-
-- **Option A (per-app MCP servers)** is confirmed by Microsoft as a legacy/backward-compatibility surface not for new projects ([MCP server options](https://learn.microsoft.com/en-us/microsoft-agent-365/tooling-servers-overview)). This matches the internal research proposal (2026-11-06).
-- **Option B (Work IQ MCP)** — the licensing claim needs care. The internal proposal (2026-11-06) described it as requiring Microsoft 365 Copilot per-seat licensing; that is **not independently confirmed as a flat per-seat requirement**. Microsoft's current Work IQ overview states usage is "independent of Microsoft 365 Copilot licensing and available through usage-based billing," with cost managed via Copilot Credits / pay-as-you-go in the Microsoft 365 admin center ([Work IQ overview](https://learn.microsoft.com/en-us/microsoft-365/copilot/extensibility/work-iq)). The **Work IQ in Copilot Studio** integration is explicitly in **preview** and uses the Copilot harness and Copilot Credits ([Work IQ in Copilot Studio](https://learn.microsoft.com/en-us/microsoft-copilot-studio/agents-experience/add-work-iq)).
-
-> [!NOTE]
-> Regardless of the exact licensing label, Option B still fails this package's drivers: it requires enabling **usage-based (consumption) billing** and a Work IQ/Agent 365 posture, and parts of the surface are in preview — whereas Option C is GA, carries no consumption-billing dependency, and is governed purely by Entra app permissions. The usage-based-billing coupling and partial-preview status are the load-bearing reasons to prefer C for a reusable, zero-extra-cost package; the precise seat-licensing question is a secondary, still-evolving detail. *(This paragraph is this package's assessment, dated 2026-11-17, not a statement of Microsoft fact.)*
 
 ## Summary
 
