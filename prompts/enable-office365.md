@@ -41,7 +41,7 @@ STEPS:
    exists, ask me which agent(s) this repo targets and create the matching file(s).
 3. Make the official Microsoft Graph docs available in TARGET_REPO_PATH. If a submodule at
    vendors/microsoft-graph-docs is not already present, add it (shallow):
-     git submodule add -b main https://github.com/microsoftgraph/microsoft-graph-docs-contrib.git vendors/microsoft-graph-docs
+     git submodule add -b main git@github.com:microsoftgraph/microsoft-graph-docs-contrib.git vendors/microsoft-graph-docs
      git config -f .gitmodules submodule.vendors/microsoft-graph-docs.shallow true
      git submodule update --init --depth 1 vendors/microsoft-graph-docs
    If you cannot add a submodule (policy/offline), note it and tell me the agent must instead consult
